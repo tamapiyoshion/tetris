@@ -11,13 +11,14 @@
     <div class="stage">
       <canvas id="game" width="560" height="1120"></canvas>
 
-      <!-- スマホ操作パッド -->
+      <!-- スマホ操作パッド（モバイル時に表示） -->
       <div class="touch" aria-label="touch controls">
         <button id="btnLeft" class="btn" type="button">←</button>
         <button id="btnRot" class="btn" type="button">⟳</button>
         <button id="btnRight" class="btn" type="button">→</button>
         <button id="btnDown" class="btn" type="button">↓</button>
         <button id="btnDrop" class="btn wide" type="button">DROP</button>
+        <button id="btnPause" class="btn wide" type="button">PAUSE</button>
       </div>
     </div>
 
@@ -40,8 +41,9 @@
       <div class="box hint">
         <div class="label">操作</div>
         <div>PC：← → / ↑回転 / ↓ / Space</div>
-        <div>スマホ：画面下のボタン</div>
+        <div>P：一時停止 / 再開</div>
         <div>R：リスタート</div>
+        <div>スマホ：画面下のボタン</div>
       </div>
     </div>
   </div>
