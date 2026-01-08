@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Tetris</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="stage">
+      <canvas id="game" width="560" height="1120"></canvas>
+
+      <!-- スマホ操作パッド -->
+      <div class="touch" aria-label="touch controls">
+        <button id="btnLeft" class="btn" type="button">←</button>
+        <button id="btnRot" class="btn" type="button">⟳</button>
+        <button id="btnRight" class="btn" type="button">→</button>
+        <button id="btnDown" class="btn" type="button">↓</button>
+        <button id="btnDrop" class="btn wide" type="button">DROP</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="box">
+        <div class="label">NEXT</div>
+        <canvas id="next" width="224" height="224"></canvas>
+      </div>
+
+      <div class="box">
+        <div class="label">SCORE</div>
+        <div id="score">0</div>
+      </div>
+
+      <div class="box">
+        <div class="label">LINES</div>
+        <div id="lines">0</div>
+      </div>
+
+      <div class="box hint">
+        <div class="label">操作</div>
+        <div>PC：← → / ↑回転 / ↓ / Space</div>
+        <div>スマホ：画面下のボタン</div>
+        <div>R：リスタート</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
