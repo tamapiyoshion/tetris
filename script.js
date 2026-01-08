@@ -15,7 +15,7 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 56;
 
-// ===== Image (character.png) =====
+// ===== Image =====
 const img = new Image();
 let imgReady = false;
 img.onload = () => (imgReady = true);
@@ -76,13 +76,9 @@ let dropInterval = 600;
 function spawn(){
   current = next;
   next = randomTetro();
-
   current.x = Math.floor((COLS - current.m[0].length)/2);
   current.y = 0;
-
-  if (collides(current, 0, 0, current.m)){
-    gameOver();
-  }
+  if (collides(current, 0, 0, current.m)) gameOver();
 }
 
 function collides(piece, dx, dy, matrix){
@@ -90,10 +86,8 @@ function collides(piece, dx, dy, matrix){
   for (let y=0; y<m.length; y++){
     for (let x=0; x<m[0].length; x++){
       if (!m[y][x]) continue;
-
       const nx = piece.x + x + dx;
       const ny = piece.y + y + dy;
-
       if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
       if (ny < 0) continue;
       if (board[ny][nx]) return true;
@@ -157,10 +151,8 @@ function clearCanvas(){
 function drawCell(gx, gy){
   const px = gx * BLOCK;
   const py = gy * BLOCK;
-
-  if (imgReady){
-    ctx.drawImage(img, px, py, BLOCK, BLOCK);
-  } else {
+  if (imgReady) ctx.drawImage(img, px, py, BLOCK, BLOCK);
+  else {
     ctx.fillStyle = "#ff3b3b";
     ctx.fillRect(px, py, BLOCK, BLOCK);
   }
@@ -208,14 +200,27 @@ function drawNext(){
   drawPiece(tmp, nextCtx, ox, oy, cell);
 }
 
+function drawOverlay(text){
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 72px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, canvas.width/2, canvas.height/2);
+  ctx.restore();
+}
+
 function render(){
   clearCanvas();
   drawBoard();
   drawPiece(current);
   drawNext();
+  if (!running) drawOverlay("PAUSED");
 }
 
-// ===== Actions (PC/Touch共通で呼ぶ) =====
+// ===== Actions =====
 function moveLeft(){
   if (!running) return;
   if (!collides(current, -1, 0)) current.x -= 1;
@@ -257,16 +262,27 @@ function hardDrop(){
   scoreEl.textContent = String(score);
   lockAndNext();
 }
+function togglePause(){
+  running = !running;
+  const btnPause = document.getElementById("btnPause");
+  if (btnPause) btnPause.textContent = running ? "PAUSE" : "RESUME";
+}
 
-// ===== Keyboard (スクロール抑止込み) =====
+// ===== Keyboard (ゲーム操作のみスクロール抑止) =====
 document.addEventListener("keydown", (e) => {
   const blockKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
   if (blockKeys.includes(e.key)) e.preventDefault();
+
+  if (e.key === "p" || e.key === "P"){
+    togglePause();
+    return;
+  }
 
   if (e.key === "r" || e.key === "R"){
     resetGame();
     return;
   }
+
   if (!running) return;
 
   if (e.key === "ArrowLeft") moveLeft();
@@ -274,7 +290,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowUp") rotate();
   if (e.key === "ArrowDown") softDrop();
   if (e.code === "Space") hardDrop();
-}, { passive: false });
+}, { passive:false });
 
 // ===== Touch Buttons (タップ/長押し) =====
 function bindHold(buttonId, onStep, intervalMs = 70){
@@ -285,8 +301,8 @@ function bindHold(buttonId, onStep, intervalMs = 70){
 
   const start = (ev) => {
     ev.preventDefault();
-    onStep(); // 押した瞬間に1回
-    timer = setInterval(onStep, intervalMs); // 長押しで連続
+    onStep();
+    timer = setInterval(onStep, intervalMs);
   };
 
   const end = (ev) => {
@@ -297,18 +313,16 @@ function bindHold(buttonId, onStep, intervalMs = 70){
     }
   };
 
-  // Pointer events で統一（スマホ/PC両対応）
-  el.addEventListener("pointerdown", start, { passive: false });
-  el.addEventListener("pointerup", end, { passive: false });
-  el.addEventListener("pointercancel", end, { passive: false });
-  el.addEventListener("pointerleave", end, { passive: false });
+  el.addEventListener("pointerdown", start, { passive:false });
+  el.addEventListener("pointerup", end, { passive:false });
+  el.addEventListener("pointercancel", end, { passive:false });
+  el.addEventListener("pointerleave", end, { passive:false });
 }
 
 bindHold("btnLeft", moveLeft, 80);
 bindHold("btnRight", moveRight, 80);
 bindHold("btnDown", softDrop, 60);
 
-// 回転とDROPは連打不要なので単発
 const btnRot = document.getElementById("btnRot");
 if (btnRot){
   btnRot.addEventListener("pointerdown", (e) => { e.preventDefault(); rotate(); }, { passive:false });
@@ -316,6 +330,10 @@ if (btnRot){
 const btnDrop = document.getElementById("btnDrop");
 if (btnDrop){
   btnDrop.addEventListener("pointerdown", (e) => { e.preventDefault(); hardDrop(); }, { passive:false });
+}
+const btnPause = document.getElementById("btnPause");
+if (btnPause){
+  btnPause.addEventListener("pointerdown", (e) => { e.preventDefault(); togglePause(); }, { passive:false });
 }
 
 // ===== Loop =====
@@ -353,6 +371,10 @@ function resetGame(){
   dropInterval = 600;
   dropCounter = 0;
   running = true;
+
+  const btnPause = document.getElementById("btnPause");
+  if (btnPause) btnPause.textContent = "PAUSE";
+
   next = randomTetro();
   spawn();
 }
