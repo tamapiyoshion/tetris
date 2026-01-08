@@ -3,9 +3,11 @@
   --fg:#fff;
   --border:#555;
 
-  /* 盤面は「幅と高さの両方で収める」 */
-  --game-max-w-desktop: 340px;      /* PC側の目安（必要なら300〜420） */
-  --game-max-h: calc(100vh - 24px); /* 縦はみ出し防止 */
+  /* PC表示サイズの目安（必要なら 300〜420 で調整） */
+  --game-max-w-desktop: 340px;
+
+  /* 縦はみ出し防止（PC/スマホ共通） */
+  --game-max-h: calc(100svh - 24px);
 }
 
 *{ box-sizing:border-box; }
@@ -17,9 +19,8 @@ body{
   font-family:sans-serif;
   text-align:center;
 
-  /* スクロールや引っ張り挙動を抑止（ゲーム向け） */
-  overscroll-behavior:none;
-  touch-action:none;
+  /* 画面の“戻る/引っ張り”を抑える（ただしスクロールは殺さない） */
+  overscroll-behavior: none;
 }
 
 .wrap{
@@ -35,22 +36,21 @@ body{
   position:relative;
 }
 
-/* 内部解像度は 560x1120 のまま。表示だけ自動調整 */
+/* 盤面：内部解像度は固定（560x1120）で、表示だけ自動調整 */
 #game{
   background:#000;
   border:2px solid var(--border);
   display:block;
   margin:0 auto;
 
-  /* PC：指定幅を基準にしつつ、画面幅に合わせて縮む */
   width: min(var(--game-max-w-desktop), 92vw);
-
-  /* 重要：縦でも制限して「必ず」画面内に入れる */
   max-height: var(--game-max-h);
   height:auto;
 
-  /* 縦横比(560:1120=1:2)を保持 */
   aspect-ratio: 1 / 2;
+
+  /* スマホのジェスチャ（ダブルタップ拡大/スワイプ）をゲーム上で抑止 */
+  touch-action: none;
 }
 
 /* NEXT */
@@ -89,8 +89,8 @@ body{
   line-height:1.6;
 }
 
-/* スマホ：盤面を大きめに（小さくなりすぎない） */
-@media (max-width: 480px){
+/* スマホ：縦並び＋盤面は小さくなりすぎない */
+@media (max-width: 820px){
   .wrap{
     flex-direction:column;
     align-items:center;
@@ -101,24 +101,22 @@ body{
   .box{ text-align:center; }
 
   #game{
-    /* スマホは画面幅を優先して大きく */
     width: min(92vw, 420px);
-    max-height: calc(100vh - 140px); /* 操作ボタン分の余白を確保 */
+    /* 操作パッド分の余白を縦側で確保（見切れ防止） */
+    max-height: calc(100svh - 210px);
   }
 }
 
-/* タッチ操作ボタン：スマホだけ表示（PCは非表示） */
+/* タッチ操作パッド：モバイル時のみ表示。画面下に“重ならず”配置 */
 .touch{
-  position:fixed;
-  left:0;
-  right:0;
-  bottom:10px;
   display:none;
+  margin-top: 12px;
   gap:10px;
   justify-content:center;
-  z-index:999;
-  pointer-events:auto;
+  flex-wrap: wrap;
+  z-index: 10;
 }
+
 .touch .btn{
   width:64px;
   height:64px;
@@ -128,15 +126,12 @@ body{
   background:#222;
   color:#fff;
 }
+
 .touch .btn.wide{
-  width:96px;
+  width:120px;
   font-size:16px;
 }
+
 @media (max-width: 820px){
   .touch{ display:flex; }
-}
-
-/* 画面が短い環境での保険（スクロールバーを出さない） */
-html, body{
-  height:100%;
 }
