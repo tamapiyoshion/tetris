@@ -7,8 +7,17 @@ const nextCtx = nextCanvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 nextCtx.imageSmoothingEnabled = false;
 
+// HUD（スマホ）
 const scoreEl = document.getElementById("score");
 const linesEl = document.getElementById("lines");
+
+// PCパネル（存在する場合だけ同期）
+const pcNext = document.querySelector(".pcNext");
+const pcNextCtx = pcNext ? pcNext.getContext("2d") : null;
+if (pcNextCtx) pcNextCtx.imageSmoothingEnabled = false;
+
+const pcScoreEl = document.querySelector('[data-bind="score"]');
+const pcLinesEl = document.querySelector('[data-bind="lines"]');
 
 // ===== Board =====
 const COLS = 10;
@@ -64,7 +73,9 @@ const board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
 let current = null;
 let next = randomTetro();
 
-let running = true;
+// 状態: "play" | "pause" | "over"
+let state = "play";
+
 let score = 0;
 let lines = 0;
 
@@ -72,13 +83,21 @@ let lastTime = 0;
 let dropCounter = 0;
 let dropInterval = 600;
 
+// GAME OVERエフェクト用
+let overAt = 0;
+let particles = [];
+
 // ===== Core =====
 function spawn(){
   current = next;
   next = randomTetro();
+
   current.x = Math.floor((COLS - current.m[0].length)/2);
   current.y = 0;
-  if (collides(current, 0, 0, current.m)) gameOver();
+
+  if (collides(current, 0, 0, current.m)){
+    gameOver();
+  }
 }
 
 function collides(piece, dx, dy, matrix){
@@ -86,8 +105,10 @@ function collides(piece, dx, dy, matrix){
   for (let y=0; y<m.length; y++){
     for (let x=0; x<m[0].length; x++){
       if (!m[y][x]) continue;
+
       const nx = piece.x + x + dx;
       const ny = piece.y + y + dy;
+
       if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
       if (ny < 0) continue;
       if (board[ny][nx]) return true;
@@ -110,6 +131,13 @@ function mergePiece(){
   }
 }
 
+function setScoreLines(){
+  scoreEl.textContent = String(score);
+  linesEl.textContent = String(lines);
+  if (pcScoreEl) pcScoreEl.textContent = String(score);
+  if (pcLinesEl) pcLinesEl.textContent = String(lines);
+}
+
 function clearLines(){
   let cleared = 0;
   for (let y=ROWS-1; y>=0; y--){
@@ -130,8 +158,7 @@ function clearLines(){
       800;
     score += add;
 
-    scoreEl.textContent = String(score);
-    linesEl.textContent = String(lines);
+    setScoreLines();
 
     dropInterval = Math.max(80, 600 - Math.floor(lines/5)*40);
   }
@@ -166,71 +193,133 @@ function drawBoard(){
   }
 }
 
-function drawPiece(piece, useCtx = ctx, ox = 0, oy = 0, cell = BLOCK){
+function drawPiece(piece){
   const m = piece.m;
   for (let y=0; y<m.length; y++){
     for (let x=0; x<m[0].length; x++){
       if (!m[y][x]) continue;
+      const gx = piece.x + x;
+      const gy = piece.y + y;
+      if (gy >= 0) drawCell(gx, gy);
+    }
+  }
+}
 
-      if (useCtx === ctx){
-        const gx = piece.x + x;
-        const gy = piece.y + y;
-        if (gy >= 0) drawCell(gx, gy);
-      } else {
-        const px = ox + x * cell;
-        const py = oy + y * cell;
-        if (imgReady) useCtx.drawImage(img, px, py, cell, cell);
-        else {
-          useCtx.fillStyle = "#ff3b3b";
-          useCtx.fillRect(px, py, cell, cell);
-        }
+function drawMiniNext(useCtx){
+  useCtx.clearRect(0, 0, 224, 224);
+  const cell = 56;
+  const w = next.m[0].length * cell;
+  const h = next.m.length * cell;
+  const ox = Math.floor((224 - w)/2);
+  const oy = Math.floor((224 - h)/2);
+
+  for (let y=0; y<next.m.length; y++){
+    for (let x=0; x<next.m[0].length; x++){
+      if (!next.m[y][x]) continue;
+      const px = ox + x * cell;
+      const py = oy + y * cell;
+      if (imgReady) useCtx.drawImage(img, px, py, cell, cell);
+      else {
+        useCtx.fillStyle = "#ff3b3b";
+        useCtx.fillRect(px, py, cell, cell);
       }
     }
   }
 }
 
-function drawNext(){
-  nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
-  const cell = 56;
-  const w = next.m[0].length * cell;
-  const h = next.m.length * cell;
-  const ox = Math.floor((nextCanvas.width - w)/2);
-  const oy = Math.floor((nextCanvas.height - h)/2);
-  const tmp = { ...next, x:0, y:0 };
-  drawPiece(tmp, nextCtx, ox, oy, cell);
-}
-
-function drawOverlay(text){
+function drawOverlay(text, sub){
   ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillStyle = "rgba(0,0,0,0.58)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
   ctx.fillStyle = "#fff";
-  ctx.font = "bold 72px sans-serif";
+  ctx.font = "bold 86px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, canvas.width/2, canvas.height/2);
+  ctx.fillText(text, canvas.width/2, canvas.height/2 - 40);
+
+  if (sub){
+    ctx.font = "bold 32px sans-serif";
+    ctx.fillText(sub, canvas.width/2, canvas.height/2 + 50);
+  }
+  ctx.restore();
+}
+
+// GAME OVER: フラッシュ＋パーティクル
+function spawnParticles(){
+  particles = [];
+  const n = 90;
+  for (let i=0; i<n; i++){
+    particles.push({
+      x: randInt(0, canvas.width),
+      y: randInt(0, canvas.height),
+      vx: (Math.random()-0.5) * 9,
+      vy: (Math.random()-0.5) * 9,
+      life: randInt(25, 60)
+    });
+  }
+}
+
+function updateParticles(){
+  for (const p of particles){
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.98;
+    p.vy *= 0.98;
+    p.life -= 1;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+function drawParticles(){
+  if (!particles.length) return;
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  for (const p of particles){
+    ctx.fillRect(p.x, p.y, 6, 6);
+  }
   ctx.restore();
 }
 
 function render(){
   clearCanvas();
   drawBoard();
-  drawPiece(current);
-  drawNext();
-  if (!running) drawOverlay("PAUSED");
+  if (current) drawPiece(current);
+
+  // NEXT描画（スマホHUD）
+  drawMiniNext(nextCtx);
+  // PCパネルNEXTにも同期
+  if (pcNextCtx) drawMiniNext(pcNextCtx);
+
+  if (state === "pause"){
+    drawOverlay("PAUSED", "P / PAUSEで再開");
+  }
+  if (state === "over"){
+    // フラッシュ（最初の200msだけ）
+    const t = performance.now() - overAt;
+    if (t < 200){
+      ctx.save();
+      ctx.fillStyle = `rgba(255,255,255,${(200 - t)/200 * 0.45})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+    updateParticles();
+    drawParticles();
+    drawOverlay("GAME OVER", "Rでリスタート");
+  }
 }
 
 // ===== Actions =====
 function moveLeft(){
-  if (!running) return;
+  if (state !== "play") return;
   if (!collides(current, -1, 0)) current.x -= 1;
 }
 function moveRight(){
-  if (!running) return;
+  if (state !== "play") return;
   if (!collides(current, 1, 0)) current.x += 1;
 }
 function rotate(){
-  if (!running) return;
+  if (state !== "play") return;
   const rotated = rotateCW(current.m);
   const kicks = [0, -1, 1, -2, 2];
   for (const k of kicks){
@@ -242,33 +331,39 @@ function rotate(){
   }
 }
 function softDrop(){
-  if (!running) return;
+  if (state !== "play") return;
   if (!collides(current, 0, 1)){
     current.y += 1;
     score += 1;
-    scoreEl.textContent = String(score);
+    setScoreLines();
   } else {
     lockAndNext();
   }
 }
 function hardDrop(){
-  if (!running) return;
+  if (state !== "play") return;
   let dropped = 0;
   while (!collides(current, 0, 1)){
     current.y += 1;
     dropped++;
   }
   score += dropped * 2;
-  scoreEl.textContent = String(score);
+  setScoreLines();
   lockAndNext();
 }
 function togglePause(){
-  running = !running;
+  if (state === "over") return;
+  state = (state === "play") ? "pause" : "play";
   const btnPause = document.getElementById("btnPause");
-  if (btnPause) btnPause.textContent = running ? "PAUSE" : "RESUME";
+  if (btnPause) btnPause.textContent = (state === "play") ? "PAUSE" : "RESUME";
+}
+function gameOver(){
+  state = "over";
+  overAt = performance.now();
+  spawnParticles();
 }
 
-// ===== Keyboard (ゲーム操作のみスクロール抑止) =====
+// ===== Keyboard =====
 document.addEventListener("keydown", (e) => {
   const blockKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
   if (blockKeys.includes(e.key)) e.preventDefault();
@@ -277,13 +372,10 @@ document.addEventListener("keydown", (e) => {
     togglePause();
     return;
   }
-
   if (e.key === "r" || e.key === "R"){
     resetGame();
     return;
   }
-
-  if (!running) return;
 
   if (e.key === "ArrowLeft") moveLeft();
   if (e.key === "ArrowRight") moveRight();
@@ -341,7 +433,7 @@ function update(time = 0){
   const dt = time - lastTime;
   lastTime = time;
 
-  if (running){
+  if (state === "play"){
     dropCounter += dt;
     if (dropCounter > dropInterval){
       dropCounter = 0;
@@ -357,20 +449,15 @@ function update(time = 0){
   requestAnimationFrame(update);
 }
 
-function gameOver(){
-  running = false;
-  console.log("GAME OVER");
-}
-
 function resetGame(){
   for (let y=0; y<ROWS; y++) board[y].fill(0);
   score = 0;
   lines = 0;
-  scoreEl.textContent = "0";
-  linesEl.textContent = "0";
+  setScoreLines();
+
   dropInterval = 600;
   dropCounter = 0;
-  running = true;
+  state = "play";
 
   const btnPause = document.getElementById("btnPause");
   if (btnPause) btnPause.textContent = "PAUSE";
