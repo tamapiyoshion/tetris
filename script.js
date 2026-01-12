@@ -24,22 +24,32 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 56;
 
-// ===== Image =====
-const img = new Image();
-let imgReady = false;
-img.onload = () => (imgReady = true);
-img.onerror = () => console.log("画像が読み込めません:", img.src);
-img.src = "character.png";
+// ===== Multi Images =====
+const SPRITE_FILES = [
+  "character1.png",
+  "character2.png",
+  "character3.png",
+  "character4.png",
+];
+
+const sprites = SPRITE_FILES.map(() => new Image());
+const spritesReady = Array(SPRITE_FILES.length).fill(false);
+
+SPRITE_FILES.forEach((src, i) => {
+  sprites[i].onload = () => { spritesReady[i] = true; };
+  sprites[i].onerror = () => console.log("画像が読み込めません:", src);
+  sprites[i].src = src;
+});
 
 // ===== Tetrominoes =====
 const TETROS = {
-  I: { id: 1, m: [[1,1,1,1]] },
-  O: { id: 2, m: [[1,1],[1,1]] },
-  T: { id: 3, m: [[0,1,0],[1,1,1]] },
-  S: { id: 4, m: [[0,1,1],[1,1,0]] },
-  Z: { id: 5, m: [[1,1,0],[0,1,1]] },
-  J: { id: 6, m: [[1,0,0],[1,1,1]] },
-  L: { id: 7, m: [[0,0,1],[1,1,1]] },
+  I: { m: [[1,1,1,1]] },
+  O: { m: [[1,1],[1,1]] },
+  T: { m: [[0,1,0],[1,1,1]] },
+  S: { m: [[0,1,1],[1,1,0]] },
+  Z: { m: [[1,1,0],[0,1,1]] },
+  J: { m: [[1,0,0],[1,1,1]] },
+  L: { m: [[0,0,1],[1,1,1]] },
 };
 const TETRO_KEYS = Object.keys(TETROS);
 
@@ -61,17 +71,27 @@ function rotateCW(m){
 function randInt(min, max){
   return Math.floor(Math.random()*(max-min+1)) + min;
 }
-function randomTetro(){
+function randomSpriteIndex(){
+  return randInt(0, SPRITE_FILES.length - 1);
+}
+function randomPiece(){
   const k = TETRO_KEYS[randInt(0, TETRO_KEYS.length-1)];
   const t = TETROS[k];
-  return { key:k, id:t.id, m: cloneMatrix(t.m) };
+  return {
+    key: k,
+    m: cloneMatrix(t.m),
+    sprite: randomSpriteIndex(), // ← ここが「毎回ランダム画像」
+    x: 0,
+    y: 0,
+  };
 }
 
 // ===== State =====
+// boardは「0=空」, 「1..N=画像index+1」を保存（盤面に残ったブロックも画像が固定）
 const board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
 
 let current = null;
-let next = randomTetro();
+let next = randomPiece();
 
 // 状態: "play" | "pause" | "over"
 let state = "play";
@@ -83,14 +103,14 @@ let lastTime = 0;
 let dropCounter = 0;
 let dropInterval = 600;
 
-// GAME OVERエフェクト用
+// GAME OVERエフェクト
 let overAt = 0;
 let particles = [];
 
 // ===== Core =====
 function spawn(){
   current = next;
-  next = randomTetro();
+  next = randomPiece();
 
   current.x = Math.floor((COLS - current.m[0].length)/2);
   current.y = 0;
@@ -111,7 +131,7 @@ function collides(piece, dx, dy, matrix){
 
       if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
       if (ny < 0) continue;
-      if (board[ny][nx]) return true;
+      if (board[ny][nx]) return true; // 0以外は埋まってる
     }
   }
   return false;
@@ -119,13 +139,14 @@ function collides(piece, dx, dy, matrix){
 
 function mergePiece(){
   const m = current.m;
+  const v = current.sprite + 1; // boardに入れる値
   for (let y=0; y<m.length; y++){
     for (let x=0; x<m[0].length; x++){
       if (!m[y][x]) continue;
       const bx = current.x + x;
       const by = current.y + y;
       if (by >= 0 && by < ROWS && bx >= 0 && bx < COLS){
-        board[by][bx] = current.id;
+        board[by][bx] = v;
       }
     }
   }
@@ -175,11 +196,16 @@ function clearCanvas(){
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function drawCell(gx, gy){
+function drawCell(gx, gy, spriteIndex){
   const px = gx * BLOCK;
   const py = gy * BLOCK;
-  if (imgReady) ctx.drawImage(img, px, py, BLOCK, BLOCK);
-  else {
+
+  const si = spriteIndex;
+  const img = sprites[si];
+
+  if (spritesReady[si]){
+    ctx.drawImage(img, px, py, BLOCK, BLOCK);
+  } else {
     ctx.fillStyle = "#ff3b3b";
     ctx.fillRect(px, py, BLOCK, BLOCK);
   }
@@ -188,7 +214,10 @@ function drawCell(gx, gy){
 function drawBoard(){
   for (let y=0; y<ROWS; y++){
     for (let x=0; x<COLS; x++){
-      if (board[y][x]) drawCell(x, y);
+      const v = board[y][x];
+      if (!v) continue;
+      const si = v - 1;
+      drawCell(x, y, si);
     }
   }
 }
@@ -200,26 +229,32 @@ function drawPiece(piece){
       if (!m[y][x]) continue;
       const gx = piece.x + x;
       const gy = piece.y + y;
-      if (gy >= 0) drawCell(gx, gy);
+      if (gy >= 0) drawCell(gx, gy, piece.sprite);
     }
   }
 }
 
 function drawMiniNext(useCtx){
   useCtx.clearRect(0, 0, 224, 224);
+
   const cell = 56;
   const w = next.m[0].length * cell;
   const h = next.m.length * cell;
   const ox = Math.floor((224 - w)/2);
   const oy = Math.floor((224 - h)/2);
 
+  const si = next.sprite;
+  const img = sprites[si];
+
   for (let y=0; y<next.m.length; y++){
     for (let x=0; x<next.m[0].length; x++){
       if (!next.m[y][x]) continue;
       const px = ox + x * cell;
       const py = oy + y * cell;
-      if (imgReady) useCtx.drawImage(img, px, py, cell, cell);
-      else {
+
+      if (spritesReady[si]){
+        useCtx.drawImage(img, px, py, cell, cell);
+      } else {
         useCtx.fillStyle = "#ff3b3b";
         useCtx.fillRect(px, py, cell, cell);
       }
@@ -245,7 +280,7 @@ function drawOverlay(text, sub){
   ctx.restore();
 }
 
-// GAME OVER: フラッシュ＋パーティクル
+// ===== GAME OVER Effect =====
 function spawnParticles(){
   particles = [];
   const n = 90;
@@ -259,7 +294,6 @@ function spawnParticles(){
     });
   }
 }
-
 function updateParticles(){
   for (const p of particles){
     p.x += p.vx;
@@ -270,7 +304,6 @@ function updateParticles(){
   }
   particles = particles.filter(p => p.life > 0);
 }
-
 function drawParticles(){
   if (!particles.length) return;
   ctx.save();
@@ -286,16 +319,13 @@ function render(){
   drawBoard();
   if (current) drawPiece(current);
 
-  // NEXT描画（スマホHUD）
   drawMiniNext(nextCtx);
-  // PCパネルNEXTにも同期
   if (pcNextCtx) drawMiniNext(pcNextCtx);
 
   if (state === "pause"){
     drawOverlay("PAUSED", "P / PAUSEで再開");
   }
   if (state === "over"){
-    // フラッシュ（最初の200msだけ）
     const t = performance.now() - overAt;
     if (t < 200){
       ctx.save();
@@ -368,14 +398,8 @@ document.addEventListener("keydown", (e) => {
   const blockKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
   if (blockKeys.includes(e.key)) e.preventDefault();
 
-  if (e.key === "p" || e.key === "P"){
-    togglePause();
-    return;
-  }
-  if (e.key === "r" || e.key === "R"){
-    resetGame();
-    return;
-  }
+  if (e.key === "p" || e.key === "P"){ togglePause(); return; }
+  if (e.key === "r" || e.key === "R"){ resetGame(); return; }
 
   if (e.key === "ArrowLeft") moveLeft();
   if (e.key === "ArrowRight") moveRight();
@@ -384,7 +408,7 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "Space") hardDrop();
 }, { passive:false });
 
-// ===== Touch Buttons (タップ/長押し) =====
+// ===== Touch Buttons =====
 function bindHold(buttonId, onStep, intervalMs = 70){
   const el = document.getElementById(buttonId);
   if (!el) return;
@@ -451,6 +475,7 @@ function update(time = 0){
 
 function resetGame(){
   for (let y=0; y<ROWS; y++) board[y].fill(0);
+
   score = 0;
   lines = 0;
   setScoreLines();
@@ -462,7 +487,7 @@ function resetGame(){
   const btnPause = document.getElementById("btnPause");
   if (btnPause) btnPause.textContent = "PAUSE";
 
-  next = randomTetro();
+  next = randomPiece();
   spawn();
 }
 
