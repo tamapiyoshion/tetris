@@ -406,7 +406,7 @@ function render(){
     }
     updateParticles();
     drawParticles();
-    drawOverlay("GAME OVER", "Rでリスタート");
+    drawOverlay(`SCORE ${score}`, "GAME OVER / Rでリスタート");
   }
 }
 
@@ -585,3 +585,4 @@ function resetGame(){
 // ===== Start =====
 resetGame();
 requestAnimationFrame(update);
+
