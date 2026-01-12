@@ -80,7 +80,7 @@ function randomPiece(){
   return {
     key: k,
     m: cloneMatrix(t.m),
-    sprite: randomSpriteIndex(), // ← ここが「毎回ランダム画像」
+    sprite: randomSpriteIndex(), // ← 毎回ランダム画像
     x: 0,
     y: 0,
   };
@@ -102,6 +102,29 @@ let lines = 0;
 let lastTime = 0;
 let dropCounter = 0;
 let dropInterval = 600;
+
+// ===== Speed (lines + score) =====
+function updateSpeed(){
+  const level = Math.max(Math.floor(lines/5), Math.floor(score/500)); // ← 500点ごとに加速
+  dropInterval = Math.max(80, 600 - level*40);
+}
+
+function setScoreLines(){
+  scoreEl.textContent = String(score);
+  linesEl.textContent = String(lines);
+  if (pcScoreEl) pcScoreEl.textContent = String(score);
+  if (pcLinesEl) pcLinesEl.textContent = String(lines);
+  updateSpeed();
+}
+
+// ===== Line Clear Animation =====
+let clearing = false;
+let clearingRows = [];
+let clearTimer = 0;
+const CLEAR_DURATION = 220; // ms
+let pendingSpawnAfterClear = false;
+let pendingAddLines = 0;
+let pendingAddScore = 0;
 
 // GAME OVERエフェクト
 let overAt = 0;
@@ -152,43 +175,72 @@ function mergePiece(){
   }
 }
 
-function setScoreLines(){
-  scoreEl.textContent = String(score);
-  linesEl.textContent = String(lines);
-  if (pcScoreEl) pcScoreEl.textContent = String(score);
-  if (pcLinesEl) pcLinesEl.textContent = String(lines);
+function calcScoreForClears(cleared){
+  return (
+    cleared === 1 ? 100 :
+    cleared === 2 ? 300 :
+    cleared === 3 ? 500 :
+    800
+  );
 }
 
-function clearLines(){
-  let cleared = 0;
+// 満タン行を探して「アニメ開始」する（実削除は後で）
+function startClearAnimation(fullRows){
+  clearing = true;
+  clearingRows = fullRows.slice();
+  clearTimer = CLEAR_DURATION;
+
+  const cleared = clearingRows.length;
+  pendingAddLines = cleared;
+  pendingAddScore = calcScoreForClears(cleared);
+
+  pendingSpawnAfterClear = true;
+}
+
+// アニメ終了時に行を削除＆スコア反映
+function finalizeClear(){
+  // 下から順に消す（indexズレ防止で降順）
+  clearingRows.sort((a,b)=>b-a);
+  for (const y of clearingRows){
+    board.splice(y, 1);
+    board.unshift(Array(COLS).fill(0));
+  }
+
+  lines += pendingAddLines;
+  score += pendingAddScore;
+
+  // 後始末
+  clearing = false;
+  clearingRows = [];
+  pendingAddLines = 0;
+  pendingAddScore = 0;
+
+  setScoreLines();
+
+  if (pendingSpawnAfterClear){
+    pendingSpawnAfterClear = false;
+    spawn();
+  }
+}
+
+// ライン検出（見つかったら true）
+function detectFullRows(){
+  const full = [];
   for (let y=ROWS-1; y>=0; y--){
-    if (board[y].every(v => v !== 0)){
-      board.splice(y, 1);
-      board.unshift(Array(COLS).fill(0));
-      cleared++;
-      y++;
-    }
+    if (board[y].every(v => v !== 0)) full.push(y);
   }
-
-  if (cleared){
-    lines += cleared;
-    const add =
-      cleared === 1 ? 100 :
-      cleared === 2 ? 300 :
-      cleared === 3 ? 500 :
-      800;
-    score += add;
-
-    setScoreLines();
-
-    dropInterval = Math.max(80, 600 - Math.floor(lines/5)*40);
-  }
+  return full;
 }
 
 function lockAndNext(){
   mergePiece();
-  clearLines();
-  spawn();
+
+  const full = detectFullRows();
+  if (full.length){
+    startClearAnimation(full);
+  } else {
+    spawn();
+  }
 }
 
 // ===== Draw =====
@@ -280,6 +332,22 @@ function drawOverlay(text, sub){
   ctx.restore();
 }
 
+// ライン消去のフラッシュ（アニメ中のみ）
+function drawClearFlash(){
+  if (!clearing || !clearingRows.length) return;
+
+  const phase = 1 - (clearTimer / CLEAR_DURATION); // 0->1
+  const blink = Math.sin(phase * Math.PI * 6);     // ちらつき
+  const alpha = 0.20 + Math.max(0, blink) * 0.55;  // 0.20..0.75
+
+  ctx.save();
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  for (const y of clearingRows){
+    ctx.fillRect(0, y * BLOCK, COLS * BLOCK, BLOCK);
+  }
+  ctx.restore();
+}
+
 // ===== GAME OVER Effect =====
 function spawnParticles(){
   particles = [];
@@ -319,6 +387,9 @@ function render(){
   drawBoard();
   if (current) drawPiece(current);
 
+  // ライン消去フラッシュ
+  drawClearFlash();
+
   drawMiniNext(nextCtx);
   if (pcNextCtx) drawMiniNext(pcNextCtx);
 
@@ -342,14 +413,17 @@ function render(){
 // ===== Actions =====
 function moveLeft(){
   if (state !== "play") return;
+  if (clearing) return;
   if (!collides(current, -1, 0)) current.x -= 1;
 }
 function moveRight(){
   if (state !== "play") return;
+  if (clearing) return;
   if (!collides(current, 1, 0)) current.x += 1;
 }
 function rotate(){
   if (state !== "play") return;
+  if (clearing) return;
   const rotated = rotateCW(current.m);
   const kicks = [0, -1, 1, -2, 2];
   for (const k of kicks){
@@ -362,6 +436,7 @@ function rotate(){
 }
 function softDrop(){
   if (state !== "play") return;
+  if (clearing) return;
   if (!collides(current, 0, 1)){
     current.y += 1;
     score += 1;
@@ -372,6 +447,7 @@ function softDrop(){
 }
 function hardDrop(){
   if (state !== "play") return;
+  if (clearing) return;
   let dropped = 0;
   while (!collides(current, 0, 1)){
     current.y += 1;
@@ -458,13 +534,20 @@ function update(time = 0){
   lastTime = time;
 
   if (state === "play"){
-    dropCounter += dt;
-    if (dropCounter > dropInterval){
-      dropCounter = 0;
-      if (!collides(current, 0, 1)){
-        current.y += 1;
-      } else {
-        lockAndNext();
+    if (clearing){
+      clearTimer -= dt;
+      if (clearTimer <= 0){
+        finalizeClear();
+      }
+    } else {
+      dropCounter += dt;
+      if (dropCounter > dropInterval){
+        dropCounter = 0;
+        if (!collides(current, 0, 1)){
+          current.y += 1;
+        } else {
+          lockAndNext();
+        }
       }
     }
   }
@@ -483,6 +566,14 @@ function resetGame(){
   dropInterval = 600;
   dropCounter = 0;
   state = "play";
+
+  // clear anim reset
+  clearing = false;
+  clearingRows = [];
+  clearTimer = 0;
+  pendingSpawnAfterClear = false;
+  pendingAddLines = 0;
+  pendingAddScore = 0;
 
   const btnPause = document.getElementById("btnPause");
   if (btnPause) btnPause.textContent = "PAUSE";
