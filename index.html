@@ -9,9 +9,26 @@
 <body>
   <div class="wrap">
     <div class="stage">
+
+      <!-- スマホ用HUD（常に見える） -->
+      <div class="hud" aria-label="HUD">
+        <div class="hudBox">
+          <div class="hudLabel">NEXT</div>
+          <canvas id="next" width="224" height="224"></canvas>
+        </div>
+        <div class="hudBox">
+          <div class="hudLabel">SCORE</div>
+          <div id="score" class="hudValue">0</div>
+        </div>
+        <div class="hudBox">
+          <div class="hudLabel">LINES</div>
+          <div id="lines" class="hudValue">0</div>
+        </div>
+      </div>
+
       <canvas id="game" width="560" height="1120"></canvas>
 
-      <!-- スマホ操作パッド（モバイル時に表示） -->
+      <!-- スマホ操作パッド（固定） -->
       <div class="touch" aria-label="touch controls">
         <button id="btnLeft" class="btn" type="button">←</button>
         <button id="btnRot" class="btn" type="button">⟳</button>
@@ -22,28 +39,31 @@
       </div>
     </div>
 
+    <!-- PC用パネル（スマホでは非表示） -->
     <div class="panel">
       <div class="box">
         <div class="label">NEXT</div>
-        <canvas id="next" width="224" height="224"></canvas>
+        <canvas class="pcNext" width="224" height="224"></canvas>
       </div>
 
       <div class="box">
         <div class="label">SCORE</div>
-        <div id="score">0</div>
+        <div class="pcValue" data-bind="score">0</div>
       </div>
 
       <div class="box">
         <div class="label">LINES</div>
-        <div id="lines">0</div>
+        <div class="pcValue" data-bind="lines">0</div>
       </div>
 
       <div class="box hint">
         <div class="label">操作</div>
-        <div>PC：← → / ↑回転 / ↓ / Space</div>
-        <div>P：一時停止 / 再開</div>
+        <div>← →：移動</div>
+        <div>↑：回転</div>
+        <div>↓：ソフトドロップ</div>
+        <div>Space：ハードドロップ</div>
+        <div>P：一時停止</div>
         <div>R：リスタート</div>
-        <div>スマホ：画面下のボタン</div>
       </div>
     </div>
   </div>
